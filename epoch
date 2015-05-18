@@ -1,0 +1,461 @@
+#!/bin/bash
+# armaserver: ArmA 3 Linux Dedicated Server Control Script
+#
+# original was:
+# armaserver: ArmA 2 Linux Dedicated Server Control Script
+#  (c) 2010 BIStudio
+#  ArmA 2 binary version must be 1.04 or later
+#
+##
+### modified by Nasdero
+### V 1.01 - 28.03.2015
+### added BEPATH and changed handling of logfiles in ${SERVER_DIR}
+#### modified by [VB]AWOL for Official Epoch Linux Support
+##### modified by Liandri
+#=======================================================================
+#========               CONFIGURATION PARAMETERS                ========
+#======== MUST BE EDITED MANUALLY TO FIT YOUR SYSTEM PARAMETERS ========
+#=======================================================================
+#Separate server files and config files in 2 different folders
+SERVER_DIR=/home/arma3server/server
+PROFILE_DIR=/home/arma3server/config
+#NAME= your game name
+#you need a folder called with this name in the ${PROFILE_DIR} folder
+#run the "check" parameter on this file here, it will give you all infos
+NAME=epoch
+#OTHERPARAMS="-cpucount=4 -maxMem=2047 -nosound -exthreads=1 -noCB"
+#Modify cpucount if needed and maxmem
+OTHERPARAMS="-maxMem=2047 -nosound -exthreads=1 -noCB -autoinit -loadMissionToMemory -cpucount=4"
+#If more than one IP on the host, uncomment and add the good one here, and uncomment 2nd line to add it to launch params
+#IP=192.168.1.129
+#OTHERPARAMS="${OTHERPARAMS} -ip=${IP}"
+#Port to listen for server
+PORT=2302
+#DELDAYS=7 => old logfiles, netlogfiles and rconlogfiles will be deleted after 7 days
+DELDAYS=7
+#MODS & SERVER_MODS : do not forget the '\' before the ';' with multiple mods use
+#MODS=@CBA_A3\;@tmr_alt\;@a3mp
+MODS=@epoch
+SERVER_MODS=@epochhive
+##=======================================================================
+#ASM: Arma Server Monitoring
+#Activate it or not
+#When installing more than 1 instance on a server, each with their own PROFILE_DIR,
+#you'll need to activate ASM=1 only on first instance, to launch only 1 instance of the ASM Server
+#set others to ASM=0
+##=======================================================================
+ASM=1
+ASM_DIR=${PROFILE_DIR}/asm
+ASM_BIN=asm
+##=======================================================================
+#If you want to use netlog, uncomment
+#NETLOG = set to 1 to activate backup of netlogfiles
+#NETLOG_BACKUP_DIR= where oldnetlogfiles will be moved
+#OTHERPARAMS = validate the use of -netlog option
+##=======================================================================
+NETLOG=1
+NETLOG_BACKUP_DIR=${PROFILE_DIR}/${NAME}/netlogs
+OTHERPARAMS="${OTHERPARAMS} -netlog"
+##=======================================================================
+#Redis backup
+#USER : used if redis backup set to 1, to check access to dump folder for the user who launch arma server
+#REDIS_BACKUP = 1 to activate backup at startup/restart of arma server
+#REDIS_ORIG_DIR = path to the Redis dump folder, usually : /var/lib/redis
+#REDIS_ORIG_FILE = name of the Redis dump, usually : dump.rdb
+#REDIS_BACKUP_DIR = folder where backup are stored
+#
+#Before trying to zip a Redis dump, add your user to Redis group to access the dump :
+# cd /var/lib/redis (or your Redis dump folder)
+# ls -ld to know the owner group : "drwxr-xr-x 2 redis redis 4096 May 14 02:12" > user is redis, and group is redis
+# AS ROOT : usermod -a -G <group name> <ArmA3 server user name> "usermod -a -G redis arma3server"
+##=======================================================================
+USER=arma3server
+REDIS_BACKUP=1
+REDIS_ORIG_DIR=/var/lib/redis
+REDIS_ORIG_FILE=dump.rdb
+REDIS_BACKUP_DIR=${PROFILE_DIR}/${NAME}/redis
+##=======================================================================
+#RCon : if RCon access used with rcon script, add 2 folders here:
+#RCON_BACKUP = set to 1 to activate rconfile backup
+#RCON_ORIG_DIR = orig dir, where logs are written,
+#RCON_BACKUP_DIR = backup dir, where logs will be moved
+##=======================================================================
+RCON_BACKUP=1
+RCON_FILE=rcon.log
+RCON_ORIG_DIR=${PROFILE_DIR}/${NAME}/rcon
+RCON_BACKUP_DIR=${PROFILE_DIR}/${NAME}/rcon/old
+#=======================================================================
+# Base files : config, basic, logs & Battleye
+#=======================================================================
+CONFIG=${PROFILE_DIR}/${NAME}/config.cfg
+CFG=${PROFILE_DIR}/${NAME}/basic.cfg
+BEPATH=${PROFILE_DIR}/${NAME}/battleye/
+LOG_DIR=${PROFILE_DIR}/${NAME}/logs
+LOGFILE=${LOG_DIR}/port_${PORT}.`date +%y.%m.%d_%H%M`.log
+#PROFILES=${PROFILE_DIR}/${NAME}
+#Binary utils
+PIDFILE=${PROFILE_DIR}/${PORT}.pid
+RUNFILE=${PROFILE_DIR}/${PORT}.run
+SERVER_BIN=${SERVER_DIR}/arma3server
+#=======================================================================
+ulimit -c 1000000
+ 
+case "$1" in
+ 
+ 
+start)
+# check if there is a server running or not
+ps ax | grep ${SERVER_BIN} | grep ${PORT}  > /dev/null
+if [ $? -eq 0 ]; then
+echo -e "\033[31mThere is a Server already running (${SERVER_BIN} at Port ${PORT})\033[0m"
+echo -e "\033[31mIt can happen, when you started a Server and stopped it to fast!\033[0m"
+echo -e "\033[31mJust stop the Server again and it should be good to start!\033[0m"
+echo $output | ps ax | grep ${SERVER_BIN} | grep ${PORT}
+else
+echo -e "Starting A3 server @PORT \033[35m${PORT}\033[0m..."
+# file to mark we want server running...
+echo "go" >${RUNFILE}
+# launch the background watchdog process to run the server
+nohup </dev/null >/dev/null $0 watchdog &
+fi
+;;
+ 
+stop)
+echo -e "Stopping A3 server if there is one (Port=\033[35m${PORT}\033[0m)..."
+if [ -f ${RUNFILE} ]; then
+# ask watcher process to exit by deleting its runfile...
+rm -f ${RUNFILE}
+else
+echo -e "\033[31mThere is no runfile (${RUNFILE}), Server shouldn't be up, will shut it down if it is up!\033[0m"
+fi
+# and terminate ArmA 3 server process
+if [ -f ${PIDFILE} ]; then
+kill -TERM $(< ${PIDFILE})
+if [ -f ${PIDFILE} ]; then
+rm -f ${PIDFILE}
+fi
+fi
+;;
+ 
+status)
+if [ -f ${RUNFILE} ]; then
+echo -e "\033[32mRunfile exist, Server should be up or is starting...\033[0m"
+echo -e "\033[35mIf the Server is \033[31mnot done\033[35m with its start, you will \033[31mnot get\033[35m a PID file info in the next rows.\033[0m"
+echo -e "\033[35mIf the Server is \033[32mdone\033[35m with its start, you will \033[32mget\033[35m a PID file and process info in the next rows.\033[0m"
+else
+echo -e "\033[31mRunfile doesn't exist, Server should be down or is going down...\033[0m"
+fi
+if [ -f ${PIDFILE} ]; then
+PID=$(< ${PIDFILE})
+echo -e "\033[32mPID file exists (PID=\033[35m${PID}\033[0m)..."
+if [ -f /proc/${PID}/cmdline ]; then
+echo -e "\033[32mServer process seems to be running...\033[0m"
+echo $output | ps ax | grep ${SERVER_BIN} | grep ${PORT}
+fi
+fi
+;;
+ 
+restart)
+$0 stop
+sleep 5s
+$0 start
+;;
+ 
+watchdog)
+# zip old logfile and move it to old directory
+cd ${LOG_DIR}
+if find port_${PORT}*.log -type f; then
+for i in port_${PORT}*.log; do tar -cvzf $i.tgz $i; rm $i; done
+mv port_${PORT}*.tgz old/
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Zipping logfiles from ${LOG_DIR} to ${LOG_DIR}/old"
+else
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] No old logfile to zip in ${LOG_DIR}"
+fi
+ 
+# zip old logfiles and move them to old directory
+cd ${PROFILE_DIR}
+if find ./*.log -type f; then
+for i in *.log; do tar -cvzf $i.`date +%y.%m.%d_%H%M`.tgz $i; rm $i; done
+mv *.tgz log ${LOG_DIR}/old
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Zipping logfiles from ${PROFILE_DIR} to ${LOG_DIR}/old"
+else
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] No old logfiles to zip in ${PROFILE_DIR}"
+fi
+ 
+# zip old netlogfile and move it to backup directory : ${NETLOG_BACKUP_DIR}
+# zip are named with last mod date of the log file, so it can be easily sorted in backup dir
+if [ ${NETLOG} = 1 ]; then
+cd ${SERVER_DIR}
+if find ./netlog_*.log -type f; then
+for i in netlog_*.log; do tar -cvzf netlog_`date -r $i +%y.%m.%d_%H%M`.tgz $i; rm $i; done
+mv netlog_*.tgz ${NETLOG_BACKUP_DIR}
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Zipping netlogfiles from ${SERVER_DIR} to ${NETLOG_BACKUP_DIR}"
+else
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] No old netlogfile to zip in ${SERVER_DIR}"
+fi
+fi
+ 
+# zip old rconfile and move it to backup directory : ${RCON_BACKUP_DIR}
+# zip are named with last mod date of the log file, so it can be easily sorted in backup dir
+if [ ${RCON_BACKUP} = 1 ]; then
+cd ${RCON_ORIG_DIR}
+if [ -f ${RCON_FILE} ]; then
+tar -cvzf rcon_`date +%y.%m.%d_%H%M`.tgz ${RCON_FILE}
+rm ${RCON_FILE}
+mv rcon*.tgz ${RCON_BACKUP_DIR}
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Zipping rconfile from ${RCON_ORIG_DIR} to ${RCON_BACKUP_DIR}"
+else
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] No old rconfile to zip in ${RCON_ORIG_DIR}"
+fi
+fi
+
+# Redis backup, if set to 1
+if [ ${REDIS_BACKUP} = 1 ]; then
+cd ${REDIS_ORIG_DIR}
+tar -cvzf ${REDIS_BACKUP_DIR}/redis.`date +%y.%m.%d_%H%M`.tgz ${REDIS_ORIG_FILE}
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Zipping Redis dump from ${REDIS_ORIG_DIR} to ${REDIS_BACKUP_DIR}"
+fi
+ 
+# delete old logs when older then ${DELDAYS} days
+find ${LOG_DIR}/old -iname "*log.tgz" -mtime +${DELDAYS} -delete
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Deleting all zipped logfiles in ${LOG_DIR}/old when older then ${DELDAYS} days."
+ 
+# delete old netlogs when older then ${DELDAYS} days
+if [ ${NETLOG} = 1 ]; then
+find ${NETLOG_BACKUP_DIR} -iname "netlog_*.tgz" -mtime +${DELDAYS} -delete
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Deleting all zipped netlogfiles in ${NETLOG_BACKUP_DIR} when older then ${DELDAYS} days."
+fi
+
+# delete old rconfile when older then ${DELDAYS} days
+if [ ${RCON_BACKUP} = 1 ]; then
+find ${RCON_BACKUP_DIR} -iname "rcon_*.tgz" -mtime +${DELDAYS} -delete
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Deleting all zipped rconfiles in ${RCON_BACKUP_DIR} when older then ${DELDAYS} days."
+fi
+
+# delete old Redis backups when older then ${DELDAYS} days
+if [ ${REDIS_BACKUP} = 1 ]; then
+find ${REDIS_BACKUP_DIR} -iname "redis*.tgz" -mtime +${DELDAYS} -delete
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Deleting all zipped Redis backup in ${REDIS_BACKUP_DIR} when older then ${DELDAYS} days."
+fi
+
+# this is a background watchdog process. Do not start directly
+while [ -f ${RUNFILE} ]; do
+
+#ASM
+if [ ${ASM} = 1 ]; then
+	echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Starting ASM"
+	killall -9 asm 1> /dev/null 2>/dev/null
+	cd ${ASM_DIR}
+	./${ASM_BIN} -s &>${ASM_DIR}/${ASM_BIN}.out &
+fi
+
+# launch the server...
+cd ${SERVER_DIR}
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Starting server (port ${PORT})..."
+#Export needed by server
+export LD_LIBRARY_PATH=.:${SERVER_DIR}:${SERVER_DIR}/@epochhive:$LD_LIBRARY_PATH
+#Finally launching game server
+taskset -c 0,1,2,3 ${SERVER_BIN} >>${LOGFILE} 2>&1 -config=${CONFIG} -cfg=${CFG} -port=${PORT} -name=${NAME} -pid=${PIDFILE} -mod=${MODS} -servermod=${SERVER_MODS}  -bepath=${BEPATH} ${OTHERPARAMS}
+
+if [ -f ${RUNFILE} ]; then
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Server died, waiting to restart..."
+sleep 5s
+else
+echo >>${LOGFILE} "WATCHDOG ($$): [$(date)] Server shutdown intentional, watchdog terminating"
+fi
+done
+;;
+ 
+check)
+clear
+echo -ne "\033[33mArmA 3 directory:\033[0m ${SERVER_DIR} "
+if [ -d ${SERVER_DIR} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= Check your settings (SERVER_DIR)! =========\n"
+fi
+ 
+echo -ne "\033[33mServer executable:\033[0m ${SERVER_BIN} "
+if [ -x ${SERVER_BIN} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= Server executable not found, arma3server should be in that folder when path is right =========\n"
+fi
+ 
+echo -ne "\033[33mCFG directory:\033[0m ${PROFILE_DIR}/${NAME} "
+if [ -d ${PROFILE_DIR}/${NAME} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= We need that folder for the config files! You can use the next row to create it: ========="
+echo -e "\033[35mmkdir ${PROFILE_DIR}/${NAME}\033[0m\n"
+fi
+ 
+echo -ne "\033[33mConfig file:\033[0m ${CONFIG} "
+if [ -f ${CONFIG} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= We need this file in that folder =========\n"
+fi
+ 
+echo -ne "\033[33mBasic file:\033[0m ${CFG} "
+if [ -f ${CFG} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= We need this file in that folder =========\n"
+fi
+ 
+echo -ne "\033[33mBattleye directory:\033[0m ${BEPATH} "
+if [ -d ${BEPATH} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= We need that folder for the Battleye files! You can use the next row to create it: ========="
+echo -e "\033[35mmkdir ${BEPATH}\033[0m\n"
+fi
+ 
+echo -ne "\033[33mArma3Profile:\033[0m ${PROFILE_DIR}/${NAME}/users/${NAME}/${NAME}.arma3profile "
+if [ -f ${PROFILE_DIR}/${NAME}/users/${NAME}/${NAME}.arma3profile ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= We need that file! You can create it like this, edit it then for your need later: ========="
+echo -e "========= ( https://community.bistudio.com/wiki/Arma_3_Dedicated_Server) ****.Arma3Profile  =========\033[35m"
+echo -n 'echo -e "version=2;\nviewDistance=3000;\npreferredObjectViewDistance=3000;\nterrainGrid=12.5;\nactiveKeys[]=\n{\n};" > '
+echo -n "${PROFILE_DIR}/${NAME}/users/${NAME}/${NAME}.arma3profile"
+echo -e "\n\033[0m"
+fi
+ 
+echo -ne "\033[33mProfile directory:\033[0m ~/.local/share/Arma\ 3\ -\ Other\ Profiles/${NAME} "
+if [ -d ~/.local/share/Arma\ 3\ -\ Other\ Profiles/${NAME} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= You should create this folder. You can use the next row for that: ========="
+echo -e "=========       ( Not sure if we need this? Capital letters are ok ?)       ========="
+echo -e "\033[35mmkdir -p ~/.local/share/Arma\ 3\ -\ Other\ Profiles/${NAME}\033[0m\n"
+fi
+ 
+echo -ne "\033[33mArma3Profile symlink:\033[0m ~/.local/share/Arma\ 3\ -\ Other\ Profiles/${NAME}/${NAME}.Arma3Profile "
+if [ -L ~/.local/share/Arma\ 3\ -\ Other\ Profiles/${NAME}/${NAME}.Arma3Profile ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= You should creat this symlink. You can use the next row for that: ========="
+echo -e "=========       ( Capital letters are ok in ~/.local/share/Arma 3.. !)      ========="
+echo -e "\033[35mln -s ${PROFILE_DIR}/${NAME}/${NAME}.arma3profile ~/.local/share/Arma\ 3\ -\ Other\ Profiles/${NAME}/${NAME}.Arma3Profile\033[0m\n"
+fi
+ 
+echo -ne "\n\033[33mLog directory:\033[0m ${LOG_DIR} "
+if [ -d ${LOG_DIR} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= We need that folder. You can use the next row to create it: ========="
+echo -e "\033[35mmkdir ${LOG_DIR}\033[0m\n"
+fi
+ 
+echo -ne "\033[33mOld Log directory:\033[0m ${LOG_DIR}/old "
+if [ -d ${LOG_DIR}/old ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= We need that folder. You can use the next row to create it: ========="
+echo -e "\033[35mmkdir ${LOG_DIR}/old\033[0m\n"
+fi
+ 
+echo -ne "\033[33mOld NetLog directory:\033[0m ${NETLOG_BACKUP_DIR} "
+if [ -d ${NETLOG_BACKUP_DIR} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= We need that folder. You can use the next row to create it: ========="
+echo -e "\033[35mmkdir ${NETLOG_BACKUP_DIR}\033[0m\n"
+fi
+ 
+echo -ne "\n\033[33mRCON log backup:\033[0m "
+if [ ${RCON_BACKUP} = 1 ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mNot set.\033[0m You should enable it for security."
+fi
+
+echo -ne "\033[33mOld RCON log backup directory:\033[0m ${RCON_BACKUP_DIR} "
+if [ -d ${RCON_BACKUP_DIR} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= We need that folder. You can use the next row to create it: ========="
+echo -e "\033[35mmkdir ${RCON_BACKUP_DIR}\033[0m\n"
+fi
+ 
+echo -ne "\n\033[33mRedis backup enabled:\033[0m "
+if [ ${REDIS_BACKUP} = 1 ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mNot set.\033[0m You should enable it for security."
+fi
+
+echo -ne "\033[33mRedis backup directory:\033[0m ${REDIS_BACKUP_DIR} "
+if [ -d ${REDIS_BACKUP_DIR} ]; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mMISSING!\033[0m"
+echo -e "========= We need that folder. You can use the next row to create it: ========="
+echo -e "\033[35mmkdir ${REDIS_BACKUP_DIR}\033[0m\n"
+fi
+ 
+echo -ne "\033[33mRedis right access for dump folder:\033[0m "
+if [ ${REDIS_BACKUP} = 1 ]; then
+cd ${REDIS_ORIG_DIR}
+if groups ${USER} | grep &>/dev/null `ls -l | grep ${REDIS_ORIG_FILE} | awk '{print $3}'`; then
+echo -e "\033[32mOK\033[0m"
+else
+echo -e "\033[31mError.\033[0m"
+echo -e "========= You have no right to access the dump, or the folder is not set. ========="
+fi
+else
+echo -e "\033[37mRedis backup not set to 1, no check for access.\033[0m"
+fi
+
+echo -e "\n\033[33mIP & Port number will be: \033[0m${IP}:${PORT}"
+
+echo -e "\n\033[33mPID file will be: \033[0m${PIDFILE}"
+echo -e "\033[33mRUN file will be: \033[0m${RUNFILE}"
+ 
+echo -e "\n\033[33mStart cmd will be:\033[0m"
+echo -e "${SERVER_BIN} >>${LOGFILE} 2>&1 -config=${CONFIG} -cfg=${CFG} -port=${PORT} -name=${NAME} -pid=${PIDFILE} -mod=${MODS} ${OTHERPARAMS}"
+ 
+echo -e "\n\033[31mIf you got something MISSING, you have to work from the top to the bottom, fix the top issue and start the check again!\033[0m"
+;;
+ 
+log)
+# you can see the logfile in realtime, no more need for screen or something else
+clear
+echo "To stop viewing the logfile press CTRL+C"
+echo "========================================"
+sleep 1s
+tail -f ${LOG_DIR}/port_${PORT}*.log
+;;
+ 
+netlog)
+# you can see the netlogfile in realtime, no more need for screen or something else
+if [ -f ${SERVER_DIR}/netlog_*.log ]; then
+clear
+echo "To stop viewing the netlogfile press CTRL+C"
+echo "========================================"
+sleep 1s
+tail -f `find ${SERVER_DIR} -type f -name "netlog_*.log" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "` | grep -i -e player -e client
+else
+echo -e "\033[31mNo netlog file can be found : -netlog set correctly?\033[0m"
+fi
+;;
+
+*)
+echo "$0 (start|stop|restart|status|check|log|netlog)"
+;;
+esac

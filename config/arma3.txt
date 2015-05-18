@@ -1,0 +1,6 @@
+@ShutdownOnFailedCommand 1
+@NoPromptForPassword 1
+login your_steam_login your_steam_password
+force_install_dir ~/server
+app_update 233780 validate
+quit

@@ -1,0 +1,2 @@
+#!/bin/bash
+steamcmd/steamcmd.sh +runscript ../config/arma3.txt
