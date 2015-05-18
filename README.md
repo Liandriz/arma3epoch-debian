@@ -177,8 +177,13 @@ Example of `crontab -e` for:
 If at any time, you edit some config file or script on a Windows computer, and ssh/ftp the file to the server, do not forget to run *dos2unix* your file, to avoid some errors:
 <pre># dos2unix my_file</pre>
 
+#Bonus
+If you don't want to use ASM, or in addition to it, you can install Glances, to monitor your server hardware.
+Just go to https://github.com/nicolargo/glances and install it.
+
 #Thanks and sources
 * **Epoch Team** for the Epoch Mod (http://epochmod.com),
 * **Killswitch** for the ASM port (http://forums.bistudio.com/showthread.php?182602-Arma-Server-Monitor-for-Linux),
 * **Dwarfer** for some optimizations (http://epochmod.com/forum/index.php?/topic/34942-wiphowto-linux-centos-70-epoch-server/),
-* The original author of the PHP-RCON script.
+* The original author of the PHP-RCON script,
+* The admins who kick/ban/kill when they want for no good reason, and gave me idea to host my own server on Debian.
