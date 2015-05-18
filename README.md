@@ -30,6 +30,8 @@ This package will install:
 <pre># adduser arma3server</pre>
 * To give this new user access to the Redis dump, add him to Redis group:
 <pre># usermod -a -G redis arma3server</pre>
+* Let the new user getting some priority on process:
+<pre># echo -e "arma3server hard priority -10" >> /etc/security/limits.conf</pre>
 * Redis Database Server Setup:
 <pre># nano /etc/redis/redis.conf</pre>
  > change "requirepass"
