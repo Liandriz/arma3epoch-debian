@@ -1,4 +1,4 @@
-#Arma 3 Epoch Server on Debian Wheezy (7.x) x64
+# Arma 3 Epoch Server on Debian Wheezy (7.x) x64
 This repo is a full package, to install an Arma 3 Epoch Dedicated Server on a Debian Wheezy x64 Server.
 
 This package will install:
@@ -12,7 +12,7 @@ This package will install:
 
 **A lot of files are from different already existings packages, read last part to see thanks and sources.**
 
-#Install
+# Install
 * Get a Debian Linux fresh box.
 * Log in as root.
 
@@ -97,7 +97,7 @@ quit</pre>
 # nano ~/config/epoch/config.cfg
 # nano ~/config/epoch/users/epoch/epoch.arma3profile</pre>
 
-#Scripts
+# Scripts
 ***~/arma3_update***
 
 Launch it to update Arma Dedicated Server files from Steam when needed, no arg, all in the config file ***~/config/arma3.txt***.
@@ -144,13 +144,13 @@ before launching server.
 Usage - can be used in CRON job:
 <pre># ~/epoch start|stop|restart|status|check|log|netlog</pre>
 
-#Last step
+# Last step
 When your server is correctly setup, if you want to start your Epoch server at boot, edit this as ***root*** :
 <pre># crontab -e</pre>
 and add the line:
 <pre>@reboot ~/epoch restart</pre>
 
-#Cron Tasks example
+# Cron Tasks example
 Example of `crontab -e` for:
 
 * Starting the Arma server at server boot,
@@ -173,15 +173,15 @@ Example of `crontab -e` for:
 00 * * * * ~/cron text "my text to send to server" >> ~/config/epoch/rcon/rcon.log
 00 * * * * ~/redis_backup</pre>
 
-#PS
+# PS
 If at any time, you edit some config file or script on a Windows computer, and ssh/ftp the file to the server, do not forget to run *dos2unix* your file, to avoid some errors:
 <pre># dos2unix my_file</pre>
 
-#Bonus
+# Bonus
 If you don't want to use ASM, or in addition to it, you can install Glances, to monitor your server hardware.
 Just go to https://github.com/nicolargo/glances and install it.
 
-#Thanks and sources
+# Thanks and sources
 * **Epoch Team** for the Epoch Mod (http://epochmod.com),
 * **Killswitch** for the ASM port (http://forums.bistudio.com/showthread.php?182602-Arma-Server-Monitor-for-Linux),
 * **Dwarfer** for some optimizations (http://epochmod.com/forum/index.php?/topic/34942-wiphowto-linux-centos-70-epoch-server/),
